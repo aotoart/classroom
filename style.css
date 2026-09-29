@@ -178,3 +178,8 @@ button, input, textarea, select { font-family: inherit; }
 .errorpage { padding: 60px 24px; display: flex; flex-direction: column; gap: 16px; }
 .errorpage p { color: var(--muted); line-height: 1.8; font-size: 14px; }
 details summary { cursor: pointer; }
+
+/* 通信中の表示 */
+body.busy::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: linear-gradient(90deg, transparent, #9DB2E8, #004796, transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: busybar 1s linear infinite; }
+@keyframes busybar { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+.sbtn:disabled { opacity: .5; }

@@ -1,6 +1,7 @@
 // AOTO教室アプリ(芦屋)画面
 const $app = document.getElementById('app');
-const S = { idToken: null, me: null, sel: 0, staffDay: null, msgInfo: null, unpaid: null, preview: null };
+const S = { idToken: null, me: null, sel: 0, days: {}, day: null, msgInfo: null, unpaid: null, preview: null };
+let pending = 0, inflight = false;
 
 // ───────── 小道具 ─────────
 const DOW_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -34,8 +35,15 @@ function toast(msg, err) {
 }
 
 async function api(action, params = {}) {
-  const res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ action, idToken: S.idToken, ...params }) });
-  const j = await res.json();
+  pending++;
+  document.body.classList.add('busy');
+  let j;
+  try {
+    const res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ action, idToken: S.idToken, ...params }) });
+    j = await res.json();
+  } finally {
+    if (--pending === 0) document.body.classList.remove('busy');
+  }
   if (j.error === 'LOGIN_EXPIRED') {
     liff.logout();
     liff.login({ redirectUri: location.href });
@@ -47,7 +55,7 @@ async function api(action, params = {}) {
 
 function openUrl(url) {
   if (!url) return;
-  if (window.liff && liff.isInClient()) liff.openWindow({ url, external: true });
+  if (window.liff && liff.isInClient()) liff.openWindow({ url, external: !/^https:\/\/(aotoart\.jp|www\.instagram\.com)/.test(url) });
   else window.open(url, '_blank', 'noopener');
 }
 
@@ -63,9 +71,15 @@ async function boot() {
     $app.addEventListener('change', onChange);
     window.addEventListener('hashchange', render);
     render();
+    if (S.me.isStaff) prefetchStaff();
   } catch (e) {
     $app.innerHTML = `<div class="errorpage"><div class="title">うまく開けませんでした</div><p>${esc(e.message)}</p><p>時間をおいてもう一度開くか、教室にご連絡ください。</p></div>`;
   }
+}
+
+function prefetchStaff() {
+  api('staffDay', {}).then(d => { S.days[''] = d; S.days[d.date] = d; }).catch(() => {});
+  Promise.all([api('msgInfo'), api('unpaid')]).then(([i, u]) => { S.msgInfo = i; S.unpaid = u; }).catch(() => {});
 }
 
 const route = () => { const [name = '', arg = ''] = location.hash.slice(1).split('/'); return { name, arg: decodeURIComponent(arg) }; };
@@ -106,7 +120,7 @@ function homeView(st) {
   else if (st.due) fee = `<div class="ok">お支払い済み</div><div class="small">次のお支払いは ${md(st.due.date)}</div>`;
   else fee = `<div class="ok">お支払い済み</div>`;
   const m = st.month;
-  const links = [[set.hp, 'ホームページ', I.web], [set.instagram, 'Instagram', I.insta], [set.events, '展覧会・イベント', I.event]].filter(x => x[0]);
+  const links = [[set.hp, '芸術教室HP', I.web], [set.instagram, 'Instagram', I.insta], [set.events, '展覧会・イベント', I.event]].filter(x => x[0]);
   return `<div class="page">
   <div class="top"><div><img src="logo.svg" alt="AOTO ART"><div class="place">芸術教室 ─ 芦屋</div></div>
   <div class="who">${esc(st.name)} さん<br>${esc(st.cls)}クラス</div></div>
@@ -114,7 +128,7 @@ function homeView(st) {
   <div class="hero">
     <div style="display:flex;justify-content:space-between;align-items:center"><div class="eyebrow">NEXT LESSON</div><div class="dim" style="font-size:11px">${esc(st.cls)}クラス</div></div>
     ${next ? `<div class="bigdate"><b>${md(next.date)}</b><span>${dow(next.date)}</span></div>
-    <div class="rule"></div><div class="row2"><div>${time(next)}</div><div class="dim">${next.title ? '課題あり' : ''}</div></div>`
+    <div class="rule"></div><div class="row2"><div>${time(next)}</div><div class="dim">${st.cls === '子ども' && next.title ? '課題あり' : ''}</div></div>`
     : `<div style="font-size:15px">次のレッスン日はまだお知らせしていません</div>`}
   </div>
   <div class="tiles2">
@@ -127,13 +141,13 @@ function homeView(st) {
     <a href="#lessons"><span class="no">01</span><span class="t">レッスン日</span>${I.arrow}</a>
     <a href="#absence"><span class="no">02</span><span class="t">欠席連絡</span>${I.arrow}</a>
     ${st.cls === '子ども' ? `<a href="#tasks"><span class="no">03</span><span class="t">課題を見る</span>${I.arrow}</a>` : ''}
-    <a href="#calendar"><span class="no">${st.cls === '子ども' ? '04' : '03'}</span><span class="t">カレンダーに登録</span>${I.arrow}</a>
+    <a href="#calendar"><span class="no">${st.cls === '子ども' ? '04' : '03'}</span><span class="t">自分のカレンダーに登録</span>${I.arrow}</a>
     ${me.isStaff ? `<a href="#staff"><span class="no">★</span><span class="t">先生の画面</span>${I.arrow}</a>` : ''}
   </nav>
   ${links.length ? `<div class="linkhead"><b>AOTO ART</b><span>AOTO Bagでイベント300円引き</span></div>
   <div class="links">${links.map(([u, t, i]) => `<a href="#" data-act="open" data-url="${esc(u)}">${i}<span>${t}</span></a>`).join('')}</div>` : ''}
   <div class="foot"><span>お急ぎはお電話で</span><a href="tel:${esc(set.phone)}" style="color:var(--muted);font-weight:600">${esc(set.phone)}</a></div>
-  <div class="foot" style="padding-top:0"><a href="#register" style="color:var(--muted)">きょうだいを追加する</a></div>
+  ${me.students.some(s => s.cls === '子ども') ? `<div class="foot" style="padding-top:0"><a href="#register" style="color:var(--muted)">きょうだいを追加する</a></div>` : ''}
   </div>`;
 }
 
@@ -201,7 +215,7 @@ function calendarView(st) {
   const set = CONFIG.API_URL;
   const feed = set.replace(/^https?:/, 'webcal:') + '?feed=' + encodeURIComponent(st.calKey);
   const rows = st.upcoming.filter(r => r.absent !== '前日まで').slice(0, 6);
-  return `<div class="page">${sub('CALENDAR', 'カレンダーに登録')}
+  return `<div class="page">${sub('CALENDAR', '自分のカレンダーに登録')}
   <div class="hero" style="background:var(--blue)">
     <div class="eyebrow" style="color:var(--pale2)">RECOMMENDED</div>
     <div style="font-size:18px;font-weight:700;line-height:1.5">一度の登録で、レッスン日が自動で入る</div>
@@ -281,23 +295,37 @@ function staffShell(tab, body) {
   <nav class="tabs" style="--n:${tabs.length}">${tabs.map(([h, t]) => `<a href="#${h}" ${h === tab ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav></div>`;
 }
 
+// 先生の画面は、前に読んだ内容をすぐ出してから、裏で最新に更新する
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const loading = name => view(staffShell(name, '<div class="loading">読み込み中…</div>'));
+const still = name => route().name === name;
+
 async function renderStaff(name, arg) {
-  if (name === 'staff-msg') {
-    view(staffShell(name, '<div class="loading">読み込み中…</div>'));
-    const [info, unpaid] = await Promise.all([api('msgInfo'), api('unpaid')]);
-    S.msgInfo = info; S.unpaid = unpaid; S.preview = null;
-    return view(staffShell(name, staffMsgView()));
+  try {
+    if (name === 'staff-msg') {
+      if (S.msgInfo && S.unpaid) view(staffShell(name, staffMsgView())); else loading(name);
+      const [info, unpaid] = await Promise.all([api('msgInfo'), api('unpaid')]);
+      const changed = !same(info, S.msgInfo) || !same(unpaid, S.unpaid);
+      S.msgInfo = info; S.unpaid = unpaid;
+      if (changed && still(name)) { S.preview = null; view(staffShell(name, staffMsgView())); }
+      return;
+    }
+    if (name === 'staff-bc') {
+      if (S.msgInfo) view(staffShell(name, staffBcView())); else loading(name);
+      const info = await api('msgInfo');
+      const changed = !same(info, S.msgInfo);
+      S.msgInfo = info;
+      if (changed && still(name) && !document.getElementById('bt').value) view(staffShell(name, staffBcView()));
+      return;
+    }
+    const key = arg || '';
+    if (S.days[key]) { S.day = S.days[key]; view(staffShell('staff', staffDayView(S.day))); } else loading('staff');
+    const d = await api('staffDay', { date: arg });
+    S.days[key] = d; S.days[d.date] = d;
+    if (still('staff') && (route().arg || '') === key && !same(d, S.day)) { S.day = d; view(staffShell('staff', staffDayView(d))); }
+  } catch (e) {
+    toast(e.message, true);
   }
-  if (name === 'staff-bc') {
-    view(staffShell(name, '<div class="loading">読み込み中…</div>'));
-    S.msgInfo = await api('msgInfo');
-    return view(staffShell(name, staffBcView()));
-  }
-  if (!S.staffDay || arg !== (S.staffDay.date || '') || !arg) {
-    view(staffShell('staff', '<div class="loading">読み込み中…</div>'));
-    S.staffDay = await api('staffDay', { date: arg });
-  }
-  view(staffShell('staff', staffDayView(S.staffDay)));
 }
 
 function staffDayView(d) {
@@ -309,7 +337,7 @@ function staffDayView(d) {
   <div class="bigdate" style="margin-top:6px"><b>${md(d.date)}</b><span>${dow(d.date)}</span></div></div>
   <div style="display:flex;gap:6px"><button data-act="day" data-date="${d.prev}" ${d.prev ? '' : 'disabled'} aria-label="前のレッスン日">‹</button><button data-act="day" data-date="${d.next}" ${d.next ? '' : 'disabled'} aria-label="次のレッスン日">›</button></div></div>
   <div class="stats"><div><small>出席予定</small><b>${all.length - absent.length}</b></div><div><small>欠席</small><b>${absent.length}</b></div><div><small>受講料 受取待ち</small><b class="w">${unpaid.length}</b></div></div>
-  ${d.groups.map(g => `<div class="grouphead"><b>${esc(g.cls)}クラス</b><span>${time(g.lesson)}${g.lesson.title ? ' ・ ' + esc(g.lesson.title) : ''}</span></div>
+  ${d.groups.map(g => `<div class="grouphead"><b>${esc(g.cls)}クラス</b><span>${time(g.lesson)}${g.cls === '子ども' && g.lesson.title ? ' ・ ' + esc(g.lesson.title) : ''}</span></div>
   <div class="list">${g.students.length ? g.students.map(s => staffRow(s, d.date, g.cls)).join('') : '<div class="empty">在籍の生徒がいません</div>'}</div>`).join('')
   || '<div class="note">この日はレッスンがありません。</div>'}
   <div style="height:24px"></div>`;
@@ -372,13 +400,21 @@ function staffBcView() {
 }
 
 // ───────── 操作 ─────────
+function setDay(d) {
+  S.days[d.date] = d; S.days[route().arg || ''] = d; S.day = d;
+  S.unpaid = null;
+  view(staffShell('staff', staffDayView(d)));
+}
+
+// 処理中は、ほかのボタンを押しても何も起きない(2回押し防止)
 async function busy(el, fn) {
-  const btns = el.querySelectorAll ? el.querySelectorAll('button') : [];
+  if (inflight) return;
+  inflight = true;
+  const btns = el.tagName === 'FORM' ? [...el.querySelectorAll('button')] : [el];
   btns.forEach(b => { b.disabled = true; });
-  if (el.tagName === 'BUTTON') el.disabled = true;
   try { await fn(); } catch (e) { toast(e.message, true); } finally {
-    btns.forEach(b => { b.disabled = false; });
-    if (el.tagName === 'BUTTON') el.disabled = false;
+    inflight = false;
+    btns.forEach(b => { if (b.isConnected) b.disabled = false; });
   }
 }
 
@@ -396,16 +432,16 @@ function onClick(e) {
     return;
   }
   if (act === 'receive') {
-    const s = S.staffDay.groups.flatMap(g => g.students).find(x => x.id === b.dataset.id);
+    const s = S.day.groups.flatMap(g => g.students).find(x => x.id === b.dataset.id);
     const label = b.dataset.kind ? b.dataset.kind : s.due.label;
     if (!confirm(`${s.name}さんから ${label} を受け取りましたか?`)) return;
-    busy(b, async () => { S.staffDay = await api('receive', { studentId: b.dataset.id, date: b.dataset.date, kind: b.dataset.kind }); toast('受け取りを記録しました'); render(); });
+    busy(b, async () => { setDay(await api('receive', { studentId: b.dataset.id, date: b.dataset.date, kind: b.dataset.kind })); toast('受け取りを記録しました'); });
     return;
   }
   if (act === 'sameday') {
-    const s = S.staffDay.groups.flatMap(g => g.students).find(x => x.id === b.dataset.id);
+    const s = S.day.groups.flatMap(g => g.students).find(x => x.id === b.dataset.id);
     if (!confirm(`${s.name}さんを当日欠席(1回受講扱い)にしますか?`)) return;
-    busy(b, async () => { S.staffDay = await api('sameDay', { studentId: b.dataset.id, date: b.dataset.date }); render(); });
+    busy(b, async () => { setDay(await api('sameDay', { studentId: b.dataset.id, date: b.dataset.date })); });
   }
 }
 
