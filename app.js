@@ -100,6 +100,7 @@ async function render() {
   if (name === 'absence') return view(absenceView(st, arg));
   if (name === 'calendar') return view(calendarView(st));
   if (name === 'tasks') return view(tasksView(st));
+  if (name === 'notices') return view(noticesView());
   if (name === 'register') return view(registerView());
   return view(homeView(st));
 }
@@ -109,34 +110,70 @@ const sub = (eyebrow, title, back = '#', extra = '') => `
   <div style="flex-grow:1"><div class="eyebrow">${eyebrow}</div><div class="title">${title}</div></div>${extra}</div>`;
 
 // ───────── 生徒の画面 ─────────
+// ───────── お知らせ ─────────
+// 読んだお知らせは、この端末だけに記録する
+function readSet() { try { return new Set(JSON.parse(localStorage.getItem('aoto_read') || '[]')); } catch (e) { return new Set(); } }
+function markRead(ids) {
+  try { const r = readSet(); ids.forEach(i => r.add(i)); localStorage.setItem('aoto_read', JSON.stringify([...r].slice(-200))); } catch (e) { /* 保存できない端末では何もしない */ }
+}
+
+// 受講料の案内(未払いはオレンジ、次回が支払い日は青)
+function feeNotice(st, next) {
+  const d = st.due;
+  if (!d) return '';
+  const kids = st.cls === '子ども';
+  const what = kids ? d.label.replace('月謝', '受講料') : `受講料(${esc(d.label)} ${yen(d.amount)})`;
+  if (d.overdue) {
+    return `<div class="fee warn"><b>${what}のお支払いが確認できていません。</b>次回お持ちください。${kids ? `(${yen(d.amount)})` : ''}<small>行き違いの場合はご容赦ください。</small></div>`;
+  }
+  if (next && d.date === next.date) {
+    return `<div class="fee">次回、${kids ? `${what} ${yen(d.amount)}` : `受講料 ${yen(d.amount)}(${esc(d.label)})`}をお持ちください。<small>現金でのお支払いです。</small></div>`;
+  }
+  return '';
+}
+
+function noticeBox(st, next) {
+  const fee = feeNotice(st, next);
+  const list = S.me.notices || [];
+  if (!fee && !list.length) return '';
+  const read = readSet();
+  return `<section class="notices"><div class="nhead"><b>お知らせ</b>${list.length ? `<a href="#notices">すべて見る</a>` : ''}</div>
+  ${fee}
+  ${list.slice(0, 2).map(n => `<a class="nitem" href="#notices"><i class="${read.has(n.id) ? '' : 'new'}" aria-label="${read.has(n.id) ? '' : '未読'}"></i><span class="nd">${n.date ? md(n.date) : ''}</span><span class="nt">${esc(n.title || n.body)}</span></a>`).join('')}
+  </section>`;
+}
+
+function noticesView() {
+  const list = S.me.notices || [];
+  const read = readSet();
+  markRead(list.map(n => n.id));
+  return `<div class="page">${sub('NEWS', 'お知らせ')}
+  <div class="list">${list.length ? list.map(n => `<div class="item" style="align-items:flex-start">
+    <div class="body" style="display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center">${n.date ? jp(n.date) : ''}${read.has(n.id) ? '' : '<span class="tag blue">NEW</span>'}${n.target !== '全員' ? `<span>${esc(n.target)}クラス</span>` : ''}</div>
+      ${n.title ? `<div class="name">${esc(n.title)}</div>` : ''}
+      ${n.body ? `<div style="font-size:13px;line-height:1.8;color:#26354A;white-space:pre-wrap">${esc(n.body)}</div>` : ''}
+    </div></div>`).join('') : '<div class="empty">お知らせはありません。</div>'}</div>
+  <div style="height:24px"></div></div>`;
+}
+
 function homeView(st) {
   const me = S.me, set = me.settings;
   const next = st.upcoming.find(r => r.absent !== '前日まで');
   const sibs = me.students.length > 1 ? `<div class="sibs">${me.students.map((s, i) =>
     `<button type="button" data-act="sel" data-i="${i}" aria-pressed="${i === S.sel}">${esc(s.name)}</button>`).join('')}</div>` : '';
-  let fee;
-  if (st.due && st.due.overdue) fee = `<div class="warn">${yen(st.due.amount)} 未受領</div><div class="small">次回、現金でお持ちください</div>`;
-  else if (st.due && next && st.due.date === next.date) fee = `<div class="warn">次回 ${yen(st.due.amount)}</div><div class="small">${esc(st.due.label)}・現金でお持ちください</div>`;
-  else if (st.due) fee = `<div class="ok">お支払い済み</div><div class="small">次のお支払いは ${md(st.due.date)}</div>`;
-  else fee = `<div class="ok">お支払い済み</div>`;
-  const m = st.month;
   const links = [[set.hp, '芸術教室HP', I.web], [set.instagram, 'Instagram', I.insta], [set.events, '展覧会・イベント', I.event]].filter(x => x[0]);
   return `<div class="page">
   <div class="top"><div><img src="logo.svg" alt="AOTO ART"><div class="place">芸術教室 ─ 芦屋</div></div>
   <div class="who">${esc(st.name)} さん<br>${esc(st.cls)}クラス</div></div>
   ${sibs}
   <div class="hero">
-    <div style="display:flex;justify-content:space-between;align-items:center"><div class="eyebrow">NEXT LESSON</div><div class="dim" style="font-size:11px">${esc(st.cls)}クラス</div></div>
+    <div class="eyebrow">NEXT LESSON</div>
     ${next ? `<div class="bigdate"><b>${md(next.date)}</b><span>${dow(next.date)}</span></div>
-    <div class="rule"></div><div class="row2"><div>${time(next)}</div><div class="dim">${st.cls === '子ども' && next.title ? '課題あり' : ''}</div></div>`
+    <div class="rule"></div><div class="row2"><div>${time(next)}</div><div class="dim">${esc(st.cls)}クラス</div></div>`
     : `<div style="font-size:15px">次のレッスン日はまだお知らせしていません</div>`}
   </div>
-  <div class="tiles2">
-    <div class="tile"><div class="eyebrow" style="color:var(--muted)">THIS MONTH</div>
-      <div style="margin-top:8px;display:flex;align-items:baseline;gap:4px"><span class="n">${m.planned}</span><span class="of">/ ${m.total} 回 出席予定</span></div>
-      <div class="bars">${Array.from({ length: m.total }, (_, i) => `<i class="${i < m.planned ? 'on' : ''}"></i>`).join('')}</div></div>
-    <div class="tile"><div class="eyebrow" style="color:var(--muted)">受講料</div>${fee}</div>
-  </div>
+  ${noticeBox(st, next)}
   <nav class="menu">
     <a href="#lessons"><span class="no">01</span><span class="t">レッスン日</span>${I.arrow}</a>
     <a href="#absence"><span class="no">02</span><span class="t">欠席連絡</span>${I.arrow}</a>
@@ -366,7 +403,7 @@ function staffRow(s, date, cls) {
   else if (s.due && cls === '子ども') right = `<button class="sbtn" data-act="receive" data-id="${s.id}" data-date="${date}">${yen(s.due.amount)} 受取</button>`;
   else if (s.due) right = `<div class="btns"><button class="sbtn" data-act="receive" data-id="${s.id}" data-date="${date}" data-kind="2回セット">2回 受取</button><button class="sbtn out" data-act="receive" data-id="${s.id}" data-date="${date}" data-kind="1回">1回</button></div>`;
   else right = `<button class="sbtn txt" data-act="sameday" data-id="${s.id}" data-date="${date}">当日欠席</button>`;
-  const sm = s.due ? `${s.due.overdue ? '未受領あり ・ ' : ''}${esc(s.due.label)} ${yen(s.due.amount)}` : '受講料 受取済み';
+  const sm = s.due ? `${s.due.overdue ? '<b style="color:var(--warn)">未受領あり</b> ・ ' : ''}${esc(s.due.label)} ${yen(s.due.amount)}` : '受講料 受取済み';
   return `<div class="item"><div class="body"><div class="name">${esc(s.name)}</div><div class="sm">${sm}</div></div>${right}</div>`;
 }
 
@@ -407,6 +444,8 @@ function staffBcView() {
     <span style="font-size:13px;font-weight:700">${t}</span><span style="font-size:11px;color:var(--navy-muted)">${c[v]}名</span></label>`).join('')}
   </fieldset>
   <div class="field"><label for="bt">メッセージ</label><textarea id="bt" name="text" rows="7" required></textarea></div>
+  <label style="margin:12px 24px 0;display:flex;gap:10px;align-items:center;font-size:13px"><input type="checkbox" name="keep" checked style="width:20px;height:20px;accent-color:#004796">アプリのお知らせにも残す</label>
+  <p class="note" style="margin-top:6px">1行目がお知らせのタイトルになります。</p>
   <div id="bcq">${quotaLine(S.msgInfo.quota, c['全員'])}</div>
   <div class="actions" style="padding-bottom:24px"><button class="btn" type="submit">確認して送信</button></div>
   </form>`;
@@ -515,7 +554,7 @@ function onSubmit(e) {
     } else if (act === 'broadcast') {
       const target = fd.get('target');
       if (!confirm(`${target === '全員' ? '全員' : target + 'クラス'}(${S.msgInfo.counts[target]}名)に送信します。よろしいですか?`)) return;
-      const r = await api('broadcast', { target, text: fd.get('text') });
+      const r = await api('broadcast', { target, text: fd.get('text'), keep: !!fd.get('keep') });
       toast(`${r.sent}名に送信しました`);
       f.reset();
     }
