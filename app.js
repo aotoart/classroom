@@ -127,7 +127,7 @@ function feeNotice(st, next) {
     return `<div class="fee warn"><b>${what}のお支払いが確認できていません。</b>次回お持ちください。${kids ? `(${yen(d.amount)})` : ''}<small>行き違いの場合はご容赦ください。</small></div>`;
   }
   if (next && d.date === next.date) {
-    return `<div class="fee">次回、${kids ? `${what} ${yen(d.amount)}` : `受講料 ${yen(d.amount)}(${esc(d.label)})`}をお持ちください。<small>現金でのお支払いです。</small></div>`;
+    return `<div class="fee">次回、${kids ? `${what} ${yen(d.amount)}` : `受講料 ${yen(d.amount)}(${esc(d.label)})`}をお持ちください。</div>`;
   }
   return '';
 }
@@ -192,12 +192,12 @@ function lessonRow(st, r) {
   const today = S.me.today;
   if (r.absent === '前日まで') {
     return `<div class="item gone"><div class="d"><b>${dd(r.date)}</b><span>${dow(r.date)}</span></div>
-    <div class="body"><div class="st">欠席連絡済み</div><div class="sm">次のレッスン日へずらしました</div></div>
+    <div class="body"><div class="st">欠席連絡済み</div><div class="sm">1回分を次回に回します</div></div>
     ${r.date > today ? `<button class="sbtn txt" data-act="cancel" data-date="${r.date}">取り消す</button>` : ''}</div>`;
   }
   if (r.absent === '当日') {
     return `<div class="item gone"><div class="d"><b>${dd(r.date)}</b><span>${dow(r.date)}</span></div>
-    <div class="body"><div class="st">当日のご欠席</div><div class="sm">1回ご受講として扱います</div></div></div>`;
+    <div class="body"><div class="st">当日のご欠席</div><div class="sm">次回に回す対象外です</div></div></div>`;
   }
   const payHere = st.due && st.due.date === r.date ? `受講料 ${yen(st.due.amount)}(${esc(st.due.label)})` : time(r);
   return `<div class="item"><div class="d"><b>${dd(r.date)}</b><span>${dow(r.date)}</span></div>
@@ -216,7 +216,7 @@ function lessonsView(st) {
     <div style="font-size:14px;font-weight:700"><span style="color:var(--blue)">${rows.filter(r => r.absent !== '前日まで').length}</span> / ${rows.length} 回 出席予定</div></div>
     <div class="list">${rows.map(r => lessonRow(st, r)).join('')}</div>`;
   }).join('<div style="height:12px"></div>') : `<div class="list"><div class="empty">レッスン日はまだお知らせしていません。</div></div>`}
-  <p class="note">前日までに欠席連絡をいただくと、その回は次のレッスン日にずらせます。</p>
+  <p class="note">前日までにご連絡いただくと、お休みした1回分を次回以降に回せます。<br>恐れ入りますが、当日のご連絡は対象外とさせていただいております。</p>
   </div>`;
 }
 
@@ -235,17 +235,17 @@ function absenceView(st, arg) {
   </fieldset>
   <div id="absinfo">${absInfo(st, sel)}</div>
   <div class="field"><label for="memo">先生へのひとこと(任意)</label><textarea id="memo" name="memo" rows="3"></textarea></div>
+  <p class="note">前日までにご連絡いただくと、お休みした1回分を次回以降に回せます。<br>恐れ入りますが、当日のご連絡は対象外とさせていただいております。</p>
   <div class="actions"><button class="btn" type="submit">欠席連絡する</button></div>
   </form></div>`;
 }
 
 function absInfo(st, date) {
   if (date > S.me.today) {
-    return `<div class="box"><div class="h">${I.check}前日までのご連絡なので、次のレッスン日にずらせます</div>
-    <div class="kv"><span>${jp(date)}</span><b>次のレッスン日へ</b></div></div>`;
+    return `<div class="box"><div class="h">${I.check}前日までのご連絡です。お休みした1回分は次回以降に回ります。</div></div>`;
   }
   return `<div class="box warn"><div class="h">当日のご連絡です</div>
-  <div style="font-size:12px;line-height:1.7">当日のご連絡の場合は、1回ご受講されたものとして扱います。</div></div>`;
+  <div style="font-size:12px;line-height:1.7">恐れ入りますが、当日のご連絡は対象外とさせていただいております。</div></div>`;
 }
 
 function calendarView(st) {
@@ -396,7 +396,7 @@ function staffDayView(d) {
 function staffRow(s, date, cls) {
   if (s.absent) {
     return `<div class="item gone"><div class="body"><div class="name" style="text-decoration:line-through">${esc(s.name)}</div>
-    <div class="sm">${s.absent === '前日まで' ? '欠席連絡(前日まで)・次回へずらし' : '当日欠席・1回受講扱い'}</div></div><div style="font-size:12px;font-weight:600">欠席</div></div>`;
+    <div class="sm">${s.absent === '前日まで' ? '欠席連絡(前日まで)・1回分を次回へ' : '当日欠席・次回に回す対象外'}</div></div><div style="font-size:12px;font-weight:600">欠席</div></div>`;
   }
   let right;
   if (s.paid) right = `<div class="paid">${I.check}${esc(s.paid)}</div>`;
@@ -492,7 +492,7 @@ function onClick(e) {
   }
   if (act === 'sameday') {
     const s = S.day.groups.flatMap(g => g.students).find(x => x.id === b.dataset.id);
-    if (!confirm(`${s.name}さんを当日欠席(1回受講扱い)にしますか?`)) return;
+    if (!confirm(`${s.name}さんを当日欠席(次回に回す対象外)にしますか?`)) return;
     busy(b, async () => { setDay(await api('sameDay', { studentId: b.dataset.id, date: b.dataset.date })); });
   }
 }
@@ -519,7 +519,7 @@ function onSubmit(e) {
   busy(f, async () => {
     if (act === 'absent') {
       const date = fd.get('date');
-      const msg = date > S.me.today ? `${jp(date)} を欠席連絡します。次のレッスン日にずらします。` : `${jp(date)} は当日のため、1回ご受講として扱います。欠席連絡しますか?`;
+      const msg = date > S.me.today ? `${jp(date)} を欠席連絡します。お休みした1回分は次回以降に回ります。` : `${jp(date)} は当日のご連絡のため、次回に回す対象外となります。欠席連絡しますか?`;
       if (!confirm(msg)) return;
       S.me = await api('absent', { studentId: student().id, date, memo: fd.get('memo') });
       toast('欠席連絡を受け付けました');
