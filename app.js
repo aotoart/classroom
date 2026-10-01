@@ -237,20 +237,33 @@ function calendarView(st) {
   <p class="note">前日の夕方にはLINEでもお知らせします。</p></div>`;
 }
 
+const chips = bring => bring ? `<div class="chips">${bring.split(/[、,・]/).map(b => b.trim()).filter(Boolean).map(b => `<i>${esc(b)}</i>`).join('')}</div>` : '';
+
 function tasksView(st) {
-  const rows = st.upcoming.filter(r => r.absent !== '前日まで');
-  const first = rows[0];
-  const rest = rows.slice(1, 6);
+  const first = st.upcoming.find(r => r.absent !== '前日まで');
+  const t = S.me.today;
+  const y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
+  const months = [[y, m], m === 12 ? [y + 1, 1] : [y, m + 1]].map(([yy, mm]) => `${yy}-${String(mm).padStart(2, '0')}`);
+  const section = (key, i) => {
+    const rows = st.upcoming.filter(r => r.date.slice(0, 7) === key && r !== first);
+    const mon = Number(key.slice(5));
+    return `<div class="label">${MONTH_EN[mon - 1]} / ${i === 0 ? '今月' : '来月'}(${mon}月)の課題</div>
+    <div class="list">${rows.length ? rows.map(r => `
+      <div class="item" style="align-items:flex-start${r.absent ? ';color:var(--gone)' : ''}"><div class="d"><b style="font-size:20px">${md(r.date)}</b><span>${dow(r.date)}</span></div>
+      <div class="body" style="display:flex;flex-direction:column;gap:6px">
+        <div class="name" style="font-size:${i === 0 ? 15 : 14}px">${r.cat ? `<span class="cat2">${esc(r.cat)}</span>` : ''}${esc(r.title || '未定')}${r.absent ? '<span class="tag blue">欠席連絡済み</span>' : ''}</div>
+        <div style="font-size:${i === 0 ? 13 : 12}px;line-height:1.7;color:${r.body ? '#26354A' : 'var(--muted)'}">${r.body ? esc(r.body) : '内容は決まり次第お知らせします'}</div>
+        ${chips(r.bring)}
+      </div></div>`).join('') : `<div class="empty">${i === 0 ? '今月これからの課題はありません。' : 'まだ登録されていません。'}</div>`}</div>`;
+  };
   return `<div class="page">${sub('ASSIGNMENTS', '子どもクラスの課題')}
-  ${first ? `<div class="card"><div class="head"><div style="display:flex;justify-content:space-between;align-items:center"><div class="pill">NEXT</div></div>
+  ${first ? `<div class="card"><div class="head"><div class="pill">NEXT</div>
     <div style="display:flex;align-items:baseline;gap:10px"><b>${md(first.date)}</b><span>${dow(first.date)} ${time(first)}</span></div>
-    <div class="tt">${esc(first.title || '課題はまだ決まっていません')}</div></div>
-    <div class="in">${first.body ? `<div>${esc(first.body)}</div>` : ''}
-    ${first.bring ? `<div class="chips">${first.bring.split(/[、,・]/).filter(Boolean).map(b => `<i>${esc(b.trim())}</i>`).join('')}</div>` : ''}
-    ${S.me.settings.hp ? `<a href="#" data-act="open" data-url="${esc(S.me.settings.hp)}" style="font-weight:700;display:flex;align-items:center;gap:6px;text-decoration:none">これまでの作品をHPで見る${I.out}</a>` : ''}</div></div>` : `<div class="list"><div class="empty">課題はまだ登録されていません。</div></div>`}
-  ${rest.length ? `<div class="label">UPCOMING / この先の課題</div><div class="list">${rest.map(r => `
-    <div class="item"><div class="d"><b style="font-size:20px">${md(r.date)}</b><span>${dow(r.date)}</span></div>
-    <div class="body"><div class="name">${esc(r.title || '未定')}</div></div></div>`).join('')}</div>` : ''}
+    ${first.cat ? `<div class="cat">${esc(first.cat)}</div>` : ''}<div class="tt">${esc(first.title || '課題はまだ決まっていません')}</div></div>
+    ${first.body || first.bring ? `<div class="in">${first.body ? `<div>${esc(first.body)}</div>` : ''}${chips(first.bring)}</div>` : ''}</div>`
+    : `<div class="list"><div class="empty">課題はまだ登録されていません。</div></div>`}
+  ${months.map(section).join('')}
+  <div style="height:24px"></div>
   </div>`;
 }
 

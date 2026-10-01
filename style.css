@@ -183,3 +183,7 @@ details summary { cursor: pointer; }
 body.busy::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: linear-gradient(90deg, transparent, #9DB2E8, #004796, transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: busybar 1s linear infinite; }
 @keyframes busybar { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 .sbtn:disabled { opacity: .5; }
+
+/* 課題の分類(絵画・工作など) */
+.card .head .cat { align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: .1em; color: #fff; border: 1px solid rgba(255,255,255,.6); border-radius: 3px; padding: 3px 8px; margin-top: 2px; }
+.cat2 { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--blue); background: var(--soft); border-radius: 3px; padding: 2px 7px; margin-right: 8px; vertical-align: 2px; }
