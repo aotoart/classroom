@@ -89,6 +89,9 @@ function view(html) { $app.innerHTML = html; window.scrollTo(0, 0); }
 async function render() {
   const { name, arg } = route();
   const me = S.me;
+  // 子どもクラスの人が見ているときだけ、少しやわらかい配色にする
+  const kidsMode = !name.startsWith('staff') && me.students.length && (me.students[S.sel] || me.students[0]).cls === '子ども';
+  document.body.classList.toggle('kids', !!kidsMode);
   if (name.startsWith('staff') && me.isStaff) return renderStaff(name, arg);
   if (!me.students.length) {
     if (me.isStaff && name !== 'register') { location.hash = 'staff'; return; }
@@ -276,6 +279,13 @@ function calendarView(st) {
 
 const chips = bring => bring ? `<div class="chips">${bring.split(/[、,・]/).map(b => b.trim()).filter(Boolean).map(b => `<i>${esc(b)}</i>`).join('')}</div>` : '';
 
+// 分類ごとの色(絵画・工作は固定、ほかは名前から決める)
+function catTone(cat) {
+  if (/絵|画|デッサン|水彩/.test(cat)) return 'tone-a';
+  if (/工作|粘土|立体|造形/.test(cat)) return 'tone-b';
+  return ['tone-a', 'tone-b', 'tone-c'][[...cat].reduce((n, c) => n + c.charCodeAt(0), 0) % 3];
+}
+
 function tasksView(st) {
   const first = st.upcoming.find(r => r.absent !== '前日まで');
   const t = S.me.today;
@@ -288,7 +298,7 @@ function tasksView(st) {
     <div class="list">${rows.length ? rows.map(r => `
       <div class="item" style="align-items:flex-start${r.absent ? ';color:var(--gone)' : ''}"><div class="d"><b style="font-size:20px">${md(r.date)}</b><span>${dow(r.date)}</span></div>
       <div class="body" style="display:flex;flex-direction:column;gap:6px">
-        <div class="name" style="font-size:${i === 0 ? 15 : 14}px">${r.cat ? `<span class="cat2">${esc(r.cat)}</span>` : ''}${esc(r.title || '未定')}${r.absent ? '<span class="tag blue">欠席連絡済み</span>' : ''}</div>
+        <div class="name" style="font-size:${i === 0 ? 15 : 14}px">${r.cat ? `<span class="cat2 ${catTone(r.cat)}">${esc(r.cat)}</span>` : ''}${esc(r.title || '未定')}${r.absent ? '<span class="tag blue">欠席連絡済み</span>' : ''}</div>
         <div style="font-size:${i === 0 ? 13 : 12}px;line-height:1.7;color:${r.body ? '#26354A' : 'var(--muted)'}">${r.body ? esc(r.body) : '内容は決まり次第お知らせします'}</div>
         ${chips(r.bring)}
       </div></div>`).join('') : `<div class="empty">${i === 0 ? '今月これからの課題はありません。' : 'まだ登録されていません。'}</div>`}</div>`;
@@ -296,7 +306,7 @@ function tasksView(st) {
   return `<div class="page">${sub('ASSIGNMENTS', '子どもクラスの課題')}
   ${first ? `<div class="card"><div class="head"><div class="pill">NEXT</div>
     <div style="display:flex;align-items:baseline;gap:10px"><b>${md(first.date)}</b><span>${dow(first.date)} ${time(first)}</span></div>
-    ${first.cat ? `<div class="cat">${esc(first.cat)}</div>` : ''}<div class="tt">${esc(first.title || '課題はまだ決まっていません')}</div></div>
+    ${first.cat ? `<div class="cat ${catTone(first.cat)}">${esc(first.cat)}</div>` : ''}<div class="tt">${esc(first.title || '課題はまだ決まっていません')}</div></div>
     ${first.body || first.bring ? `<div class="in">${first.body ? `<div>${esc(first.body)}</div>` : ''}${chips(first.bring)}</div>` : ''}</div>`
     : `<div class="list"><div class="empty">課題はまだ登録されていません。</div></div>`}
   ${months.map(section).join('')}

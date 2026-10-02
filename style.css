@@ -202,3 +202,32 @@ body.busy::before { content: ''; position: fixed; top: 0; left: 0; right: 0; hei
 .nitem i.new { background: var(--blue); }
 .nitem .nd { font-size: 12px; font-weight: 600; color: var(--muted); flex-shrink: 0; }
 .nitem .nt { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ───────── 子どもクラス(配色はそのまま、少しやわらかく) ───────── */
+:root { --paint-a: #E9785A; --paint-b: #5BB592; --paint-c: #F2C14E; --ink-a: #B8482A; --ink-b: #2C7D60; --ink-c: #96700B; }
+body.kids { font-family: 'Archivo', 'Zen Maru Gothic', 'Zen Kaku Gothic New', system-ui, sans-serif; }
+.kids .hero, .kids .menu, .kids .notices, .kids .list, .kids .card, .kids .links a, .kids .box, .kids .pick label, .kids .field textarea { border-radius: 16px; }
+.kids .btn, .kids .sbtn { border-radius: 999px; }
+.kids .sibs button { border-radius: 999px; }
+/* 絵の具の3色の点 */
+.kids .hero .eyebrow::after, .kids .notices .nhead b::after, .kids .card .head .pill::after {
+  content: ''; display: inline-block; width: 34px; height: 8px; margin-left: 10px; vertical-align: 1px;
+  background: radial-gradient(circle at 4px 4px, var(--paint-a) 3.5px, transparent 4px),
+              radial-gradient(circle at 16px 4px, var(--paint-c) 3.5px, transparent 4px),
+              radial-gradient(circle at 28px 4px, var(--paint-b) 3.5px, transparent 4px);
+}
+.kids .card .head .pill::after { width: 30px; margin-left: 8px; }
+/* メニューの番号に色 */
+.kids .menu a:nth-child(1) .no { color: var(--ink-a); }
+.kids .menu a:nth-child(2) .no { color: var(--ink-c); }
+.kids .menu a:nth-child(3) .no { color: var(--ink-b); }
+.kids .menu a:nth-child(4) .no { color: var(--blue); }
+.kids .nitem i.new { background: var(--paint-a); }
+/* 課題の分類の色 */
+.cat2.tone-a { color: var(--ink-a); background: #FCEDE7; }
+.cat2.tone-b { color: var(--ink-b); background: #E6F4EE; }
+.cat2.tone-c { color: var(--ink-c); background: #FBF2DC; }
+.card .head .cat.tone-a { background: var(--paint-a); border-color: var(--paint-a); }
+.card .head .cat.tone-b { background: var(--paint-b); border-color: var(--paint-b); }
+.card .head .cat.tone-c { background: var(--paint-c); border-color: var(--paint-c); color: var(--ink); }
+.kids .chips i { border-radius: 999px; }
