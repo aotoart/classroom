@@ -231,3 +231,24 @@ body.kids { font-family: 'Archivo', 'Zen Maru Gothic', 'Zen Kaku Gothic New', sy
 .card .head .cat.tone-b { background: var(--paint-b); border-color: var(--paint-b); }
 .card .head .cat.tone-c { background: var(--paint-c); border-color: var(--paint-c); color: var(--ink); }
 .kids .chips i { border-radius: 999px; }
+
+/* 作品集 */
+.wgrid { margin: 0 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.wgrid a { position: relative; aspect-ratio: 1; background: var(--line); border-radius: 3px; overflow: hidden; display: block; }
+.wgrid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wgrid span { position: absolute; left: 6px; bottom: 5px; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.shot { margin: 0 16px; background: var(--ink); border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 240px; }
+.shot img { display: block; max-width: 100%; max-height: 72vh; }
+.shotnav { margin: 4px 16px 0; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+.shotnav a, .shotnav > span:first-child, .shotnav > span:last-child { min-height: 44px; display: flex; align-items: center; padding: 0 8px; font-weight: 700; text-decoration: none; }
+.wmeta { margin: 8px 24px 0; display: flex; flex-direction: column; gap: 6px; }
+.wmeta .d { font-size: 12px; color: var(--muted); }
+.wmeta .t { font-size: 20px; font-weight: 700; }
+.wmeta .m { font-size: 14px; line-height: 1.8; color: #26354A; white-space: pre-wrap; margin-top: 4px; }
+.photo { margin: 8px 16px 0; min-height: 200px; border: 1.5px dashed var(--pale); border-radius: 6px; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+.photo span { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--blue); font-size: 15px; font-weight: 700; }
+.photo img { display: block; width: 100%; max-height: 50vh; object-fit: contain; background: var(--ink); }
+.photo [hidden] { display: none; }
+.kids .wgrid a { border-radius: 10px; }
+.kids .shot, .kids .photo, .kids .field input { border-radius: 16px; }
+.kids .menu a:nth-child(5) .no { color: var(--ink-a); }
