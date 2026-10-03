@@ -84,7 +84,9 @@ function prefetchStaff() {
 }
 
 const route = () => { const [name = '', arg = ''] = location.hash.slice(1).split('/'); return { name, arg: decodeURIComponent(arg) }; };
-const student = () => S.me.students[S.sel] || S.me.students[0];
+// 先生の「生徒画面」では、名簿に入らない見本の生徒を表示する
+const studs = () => (S.demoOn ? S.me.demo : S.me.students);
+const student = () => studs()[S.sel] || studs()[0];
 function view(html) { $app.innerHTML = html; window.scrollTo(0, 0); }
 
 async function render() {
@@ -92,10 +94,11 @@ async function render() {
   const me = S.me;
   freeUrls();
   // 子どもクラスの人が見ているときだけ、少しやわらかい配色にする
-  const kidsMode = !name.startsWith('staff') && me.students.length && (me.students[S.sel] || me.students[0]).cls === '子ども';
+  if (name === 'demo' && me.demo) { S.demoOn = true; S.sel = 0; location.hash = ''; return; }
+  const kidsMode = !name.startsWith('staff') && studs().length && student().cls === '子ども';
   document.body.classList.toggle('kids', !!kidsMode);
   if (name.startsWith('staff') && me.isStaff) return renderStaff(name, arg);
-  if (!me.students.length) {
+  if (!studs().length) {
     if (me.isStaff && name !== 'register') { location.hash = 'staff'; return; }
     return view(registerView());
   }
@@ -166,13 +169,14 @@ function noticesView() {
 function homeView(st) {
   const me = S.me, set = me.settings;
   const next = st.upcoming.find(r => r.absent !== '前日まで');
-  const sibs = me.students.length > 1 ? `<div class="sibs">${me.students.map((s, i) =>
+  const demo = S.demoOn ? `<div class="fee" style="margin:0 16px 12px">お試し表示です(先生だけに見えています)。欠席連絡などは送信されません。</div>` : '';
+  const sibs = studs().length > 1 ? `<div class="sibs">${studs().map((s, i) =>
     `<button type="button" data-act="sel" data-i="${i}" aria-pressed="${i === S.sel}">${esc(s.name)}</button>`).join('')}</div>` : '';
   const links = [[set.hp, '芸術教室HP', I.web], [set.instagram, 'Instagram', I.insta], [set.events, '展覧会・イベント', I.event]].filter(x => x[0]);
   return `<div class="page">
   <div class="top"><div><img src="logo.svg" alt="AOTO ART"><div class="place">芸術教室 ─ 芦屋</div></div>
   <div class="who">${esc(st.name)} さん<br>${esc(st.cls)}クラス</div></div>
-  ${sibs}
+  ${demo}${sibs}
   <div class="hero">
     <div class="eyebrow">NEXT LESSON</div>
     ${next ? `<div class="bigdate"><b>${md(next.date)}</b><span>${dow(next.date)}</span></div>
@@ -191,7 +195,7 @@ function homeView(st) {
   ${links.length ? `<div class="linkhead"><b>AOTO ART</b><span>AOTO Bagでイベント300円引き</span></div>
   <div class="links">${links.map(([u, t, i]) => `<a href="#" data-act="open" data-url="${esc(u)}">${i}<span>${t}</span></a>`).join('')}</div>` : ''}
   <div class="foot"><span>お急ぎはお電話で</span><a href="tel:${esc(set.phone)}" style="color:var(--muted);font-weight:600">${esc(set.phone)}</a></div>
-  ${me.students.some(s => s.cls === '子ども') ? `<div class="foot" style="padding-top:0"><a href="#register" style="color:var(--muted)">きょうだいを追加する</a></div>` : ''}
+  ${!S.demoOn && me.students.some(s => s.cls === '子ども') ? `<div class="foot" style="padding-top:0"><a href="#register" style="color:var(--muted)">きょうだいを追加する</a></div>` : ''}
   </div>`;
 }
 
@@ -481,7 +485,7 @@ function pendingView(st) {
 // ───────── 先生の画面 ─────────
 function staffShell(tab, body) {
   const tabs = [['staff', '名簿'], ['staff-msg', '連絡'], ['staff-bc', '一斉LINE']];
-  if (S.me.students.length) tabs.push(['', '生徒画面']);
+  if (S.me.students.length || S.me.demo) tabs.push([S.me.students.length ? '' : 'demo', '生徒画面']);
   return `<div class="page dark" style="padding-bottom:0">
   <div class="stafftop"><div class="l"><img src="logo-white.svg" alt="AOTO ART"><span>STAFF</span></div><div class="who">${esc(S.me.staffName)}</div></div>
   ${body}
@@ -617,6 +621,7 @@ function onClick(e) {
   const b = e.target.closest('[data-act]');
   if (!b || b.tagName === 'FORM') return;
   const act = b.dataset.act;
+  if (S.demoOn && (act === 'cancel' || (act === 'open' && /[?&](feed|ics)=/.test(b.dataset.url)))) { e.preventDefault(); toast('お試し表示では使えません'); return; }
   if (act === 'open') { e.preventDefault(); openUrl(b.dataset.url); return; }
   if (act === 'sel') { S.sel = Number(b.dataset.i); render(); return; }
   if (act === 'reload') { busy(b, async () => { S.me = await api('me'); render(); }); return; }
@@ -688,6 +693,8 @@ function onSubmit(e) {
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
       toast('MY作品集に保存しました');
       location.hash = 'work/' + w.id;
+    } else if (act === 'absent' && S.demoOn) {
+      toast('お試し表示では送信されません');
     } else if (act === 'absent') {
       const date = fd.get('date');
       const msg = date > S.me.today ? `${jp(date)} を欠席連絡します。お休みした1回分は次回以降に回ります。` : `${jp(date)} は当日のご連絡のため、次回に回す対象外となります。欠席連絡しますか?`;
