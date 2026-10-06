@@ -547,7 +547,7 @@ function staffRow(s, date, cls) {
   }
   let right;
   if (s.paid) right = `<div class="paid">${I.check}${esc(s.paid)}</div>`;
-  else if (s.due && cls === '子ども') right = `<button class="sbtn" data-act="receive" data-id="${s.id}" data-date="${date}">${yen(s.due.amount)} 受取</button>`;
+  else if (s.due && cls === '子ども') right = `<div class="btns"><button class="sbtn" data-act="receive" data-id="${s.id}" data-date="${date}">${yen(s.due.amount)} 受取</button>${s.due.count > 1 ? `<button class="sbtn out" data-act="receive" data-id="${s.id}" data-date="${date}" data-kind="1回">1回</button>` : ''}</div>`;
   else if (s.due) right = `<div class="btns"><button class="sbtn" data-act="receive" data-id="${s.id}" data-date="${date}" data-kind="2回セット">2回 受取</button><button class="sbtn out" data-act="receive" data-id="${s.id}" data-date="${date}" data-kind="1回">1回</button></div>`;
   else right = `<button class="sbtn txt" data-act="sameday" data-id="${s.id}" data-date="${date}">当日欠席</button>`;
   const sm = s.due ? `${s.due.overdue ? '<b style="color:var(--warn)">未受領あり</b> ・ ' : ''}${esc(s.due.label)} ${yen(s.due.amount)}` : '受講料 受取済み';
@@ -639,7 +639,8 @@ function onClick(e) {
   }
   if (act === 'receive') {
     const s = S.day.groups.flatMap(g => g.students).find(x => x.id === b.dataset.id);
-    const label = b.dataset.kind ? b.dataset.kind : s.due.label;
+    const label = !b.dataset.kind ? s.due.label
+      : s.due.label.includes('月謝') ? `1回分(${yen(s.due.amount / s.due.count)})` : b.dataset.kind;
     if (!confirm(`${s.name}さんから ${label} を受け取りましたか?`)) return;
     busy(b, async () => { setDay(await api('receive', { studentId: b.dataset.id, date: b.dataset.date, kind: b.dataset.kind })); toast('受け取りを記録しました'); });
     return;
