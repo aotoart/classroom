@@ -252,3 +252,17 @@ body.kids { font-family: 'Archivo', 'Zen Maru Gothic', 'Zen Kaku Gothic New', sy
 .kids .wgrid a { border-radius: 10px; }
 .kids .shot, .kids .photo, .kids .field input { border-radius: 16px; }
 .kids .menu a:nth-child(5) .no { color: var(--ink-a); }
+
+.stats b.s { font-size: 19px; }
+.tcbox { margin: 18px 16px 0; border: 1px solid var(--navy-line); border-radius: 6px; padding: 18px; display: block; }
+.tcbox.warn { border-color: #6A3A24; background: #1A1012; }
+.tcnow { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; }
+.tcnow b { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.tcnow span { font-size: 13px; color: var(--navy-muted); }
+.tcsm { font-size: 11px; color: var(--navy-muted); line-height: 1.7; margin-top: 10px; }
+.tccheck { display: flex; gap: 10px; align-items: center; font-size: 13px; margin-top: 14px; }
+.tccheck input { width: 22px; height: 22px; accent-color: var(--blue); flex-shrink: 0; }
+.tcrow { text-decoration: none; color: inherit; }
+.tcrow .name { font-variant-numeric: tabular-nums; }
+.tcover { margin: 10px 24px 0; font-size: 12px; color: var(--navy-muted); }
+.tcover b { color: #fff; font-size: 13px; }

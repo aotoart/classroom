@@ -1,6 +1,6 @@
 // AOTO教室アプリ(芦屋)画面
 const $app = document.getElementById('app');
-const S = { idToken: null, me: null, sel: 0, days: {}, day: null, msgInfo: null, unpaid: null, preview: null };
+const S = { idToken: null, me: null, sel: 0, days: {}, day: null, msgInfo: null, unpaid: null, preview: null, tc: null, tcMonth: '' };
 let pending = 0, inflight = false;
 
 // ───────── 小道具 ─────────
@@ -81,6 +81,7 @@ async function boot() {
 function prefetchStaff() {
   api('staffDay', {}).then(d => { S.days[''] = d; S.days[d.date] = d; }).catch(() => {});
   Promise.all([api('msgInfo'), api('unpaid')]).then(([i, u]) => { S.msgInfo = i; S.unpaid = u; }).catch(() => {});
+  api('work', {}).then(d => { S.tc = d; }).catch(() => {});
 }
 
 const route = () => { const [name = '', arg = ''] = location.hash.slice(1).split('/'); return { name, arg: decodeURIComponent(arg) }; };
@@ -484,7 +485,7 @@ function pendingView(st) {
 
 // ───────── 先生の画面 ─────────
 function staffShell(tab, body) {
-  const tabs = [['staff', '名簿'], ['staff-msg', '連絡'], ['staff-bc', '一斉LINE']];
+  const tabs = [['staff', '名簿'], ['staff-work', '勤務'], ['staff-msg', '連絡'], ['staff-bc', '一斉LINE']];
   if (S.me.students.length || S.me.demo) tabs.push([S.me.students.length ? '' : 'demo', '生徒画面']);
   return `<div class="page dark" style="padding-bottom:0">
   <div class="stafftop"><div class="l"><img src="logo-white.svg" alt="AOTO ART"><span>STAFF</span></div><div class="who">${esc(S.me.staffName)}</div></div>
@@ -513,6 +514,19 @@ async function renderStaff(name, arg) {
       const changed = !same(info, S.msgInfo);
       S.msgInfo = info;
       if (changed && still(name) && !document.getElementById('bt').value) view(staffShell(name, staffBcView()));
+      return;
+    }
+    if (name === 'staff-work') {
+      if (arg) {
+        if (!S.tc) { loading(name); S.tc = await api('work', { month: S.tcMonth }); }
+        if (still(name) && route().arg) view(staffShell(name, tcEditView(route().arg)));
+        return;
+      }
+      if (S.tc) view(staffShell(name, tcView())); else loading(name);
+      const w = await api('work', { month: S.tcMonth });
+      const moved = !same(w, S.tc);
+      S.tc = w;
+      if (moved && still(name) && !route().arg) view(staffShell(name, tcView()));
       return;
     }
     const key = arg || '';
@@ -598,6 +612,105 @@ function staffBcView() {
   </form>`;
 }
 
+// ───────── 勤務(タイムカード) ─────────
+const fareText = n => Number(n || 0).toLocaleString('ja-JP') + '円';
+
+function tcView() {
+  const w = S.tc, mn = Number(w.month.slice(5));
+  return `
+  <div class="daynav"><div><div class="eyebrow">TIMECARD ・ ${esc(w.name)}</div>
+  <div class="bigdate" style="margin-top:6px"><b>${mn}</b><span>${MONTH_EN[mn - 1]} ${w.month.slice(0, 4)}</span></div></div>
+  <div style="display:flex;gap:6px"><button data-act="tcMonth" data-m="${w.prevMonth}" aria-label="前の月">‹</button><button data-act="tcMonth" data-m="${w.nextMonth}" ${w.nextMonth ? '' : 'disabled'} aria-label="次の月">›</button></div></div>
+  <div class="stats"><div><small>実働</small><b class="s">${esc(w.mine.hm)}</b></div><div><small>1人体制</small><b class="s">${w.mine.solo}コマ</b></div><div><small>交通費</small><b class="s">${fareText(w.mine.fare)}</b></div></div>
+  ${w.mine.over ? `<div class="tcover">うち8時間を超えた分 <b>${esc(w.mine.overHm)}</b>(${w.overRate}倍で計算します)</div>` : ''}
+  ${punchBox(w)}
+  ${w.unfinished.length ? `<div class="tcbox warn"><div class="eyebrow" style="color:#FFB48A">CHECK</div>
+    <div style="font-size:13px;line-height:1.8;margin-top:8px">退勤が記録されていない日があります。タップして直してください。</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">${w.unfinished.map(r => `<a class="sbtn out" style="display:flex;align-items:center;text-decoration:none" href="#staff-work/${encodeURIComponent(r.id)}">${jp(r.date)}</a>`).join('')}</div></div>` : ''}
+  <div class="grouphead"><b>${mn}月の記録</b><span>${w.rows.length}件 ・ タップで直せます</span></div>
+  <div class="list">${w.rows.length ? w.rows.map(tcItem).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
+  <div class="pad" style="margin-top:12px"><button class="btn ghost" data-act="tcAdd">記録を足す</button></div>
+  ${w.admin ? tcPayView(w) : ''}
+  <div style="height:24px"></div>`;
+}
+
+function punchBox(w) {
+  if (w.open) {
+    return `<form data-act="punchOut" class="tcbox">
+    <div class="eyebrow">WORKING ・ ${jp(w.today)}</div>
+    <div class="tcnow"><b>${esc(w.open.in)}</b><span>に出勤しました</span></div>
+    <div class="field" style="margin:16px 0 0"><label for="pr">今日の休憩(分)</label>
+    <input id="pr" name="rest" type="number" inputmode="numeric" min="0" max="600" step="5" placeholder="0" value="${w.open.rest || ''}"></div>
+    <div class="field" style="margin:12px 0 0"><label for="pf">今日の交通費(円)</label>
+    <input id="pf" name="fare" type="number" inputmode="numeric" min="0" max="99999" step="10" placeholder="0" value="${w.open.fare || ''}"></div>
+    <label class="tccheck"><input type="checkbox" name="solo" ${w.open.solo ? 'checked' : ''}>このコマは1人で見ました(+${yen(w.soloYen)})</label>
+    <button class="btn" type="submit" style="margin-top:14px">退勤を記録する</button>
+    <div class="tcsm">今の時刻(${esc(w.now)})で記録します。あとから直せます。</div></form>`;
+  }
+  const done = w.doneToday;
+  return `<div class="tcbox">
+  <div class="eyebrow">TODAY ・ ${jp(w.today)}</div>
+  <div class="tcnow">${done.length
+    ? `<b>${esc(done[done.length - 1].out)}</b><span>に退勤しました</span>`
+    : `<b>${esc(w.now)}</b><span>いまの時刻</span>`}</div>
+  ${done.length ? `<div class="tcsm">${done.map(r => `${esc(r.in)} – ${esc(r.out)}(${esc(r.hm)})`).join(' / ')}</div>` : ''}
+  <button class="btn" data-act="punchIn" style="margin-top:14px">${done.length ? 'もう一度 出勤する' : '出勤を記録する'}</button>
+  ${done.length ? '' : `<div class="tcsm">押した時刻で記録します。忘れた日は下の「記録を足す」から入れられます。</div>`}</div>`;
+}
+
+function tcItem(r) {
+  const w = S.tc;
+  const sm = [
+    w.admin && !r.mine ? esc(r.name) : '',
+    r.rest ? '休憩 ' + r.rest + '分' : '',
+    r.restShort ? '<b style="color:var(--warn)">休憩が足りません</b>' : '',
+    r.solo ? '1人体制 ' + r.solo + 'コマ' : '',
+    r.fare ? '交通費 ' + fareText(r.fare) : '',
+    r.out ? '' : '<b style="color:var(--warn)">退勤なし</b>',
+    r.memo ? esc(r.memo) : '',
+  ].filter(Boolean).join(' ・ ');
+  return `<a class="item tcrow" href="#staff-work/${encodeURIComponent(r.id)}">
+  <div class="d"><b>${dd(r.date)}</b><span>${dow(r.date)}</span></div>
+  <div class="body"><div class="name">${r.in ? esc(r.in) : '—'} – ${r.out ? esc(r.out) : '—'}${r.out ? '　' + esc(r.hm) : ''}</div>
+  ${sm ? `<div class="sm">${sm}</div>` : ''}</div>${I.arrow}</a>`;
+}
+
+function tcPayView(w) {
+  const mn = Number(w.month.slice(5));
+  return `<div style="margin:24px 24px 0;height:1px;background:var(--navy-line)"></div>
+  <div class="grouphead"><b>${mn}月の支給額</b><span style="color:#FFB48A">管理の先生のみ</span></div>
+  <p class="note" style="margin-top:0">時給×実働 ＋ 単独手当×コマ数 ＋ 交通費。1日8時間を超えた分は${w.overRate}倍です。</p>
+  <div class="list" style="margin-top:10px">${w.pay.length ? w.pay.map(p => `<div class="item">
+    <div class="body"><div class="name">${esc(p.name)}</div>
+    <div class="sm">${esc(p.hm)}(${p.days}件)${p.over ? ' ・ <b>うち8時間超 ' + esc(p.overHm) + '</b>' : ''} ・ ${p.wage ? '時給' + fareText(p.wage) : '<b style="color:var(--warn)">時給が未設定</b>'} ・ 1人体制${p.solo}コマ(1コマ${fareText(p.solo1)}) ・ 交通費${fareText(p.fare)}</div></div>
+    <div class="paid" style="font-size:15px">${p.amount == null ? '—' : fareText(p.amount)}</div></div>`).join('')
+    : '<div class="empty">この月の記録はありません</div>'}
+  ${w.payTotal ? `<div class="item" style="background:var(--soft)"><div class="body"><div class="name">合計</div></div>
+    <div class="paid" style="font-size:15px">${fareText(w.payTotal)}</div></div>` : ''}</div>
+  ${w.pay.some(p => !p.wage) ? '<p class="note">時給は「先生」シートの「時給」に入れてください。1人体制の手当も先生ごとに「単独手当」で変えられます。</p>' : ''}`;
+}
+
+function tcEditView(id) {
+  const w = S.tc;
+  const r = id === 'new' ? null : w.rows.find(x => x.id === id);
+  const head = `<div class="sub"><a class="back" href="#staff-work">${I.back}</a><div class="title">${r ? '記録を直す' : '記録を足す'}</div></div>`;
+  if (id !== 'new' && !r) return `${head}<p class="note">記録が見つかりませんでした。月を切り替えて探してください。</p>`;
+  const v = r || { date: w.today, in: '', out: '', rest: 0, solo: 0, fare: 0, memo: '' };
+  return `<form data-act="tcSave" ${r ? `data-id="${esc(r.id)}"` : ''}>${head}
+  ${r && !r.mine ? `<p class="note" style="margin-top:0">${esc(r.name)}さんの記録です。</p>` : ''}
+  <div class="field"><label for="ed">日付</label><input id="ed" name="date" type="date" value="${esc(v.date)}" required></div>
+  <div style="display:flex">
+    <div class="field" style="flex:1"><label for="ei">出勤</label><input id="ei" name="in" type="time" value="${esc(v.in)}"></div>
+    <div class="field" style="flex:1;margin-left:0"><label for="eo">退勤</label><input id="eo" name="out" type="time" value="${esc(v.out)}"></div></div>
+  <div class="field"><label for="er">休憩(分)</label><input id="er" name="rest" type="number" inputmode="numeric" min="0" max="600" step="5" placeholder="0" value="${v.rest || ''}"></div>
+  <div class="field"><label for="es">1人で見たコマ数</label><input id="es" name="solo" type="number" inputmode="numeric" min="0" max="9" step="1" value="${v.solo || 0}"></div>
+  <div class="field"><label for="ef">交通費(円)</label><input id="ef" name="fare" type="number" inputmode="numeric" min="0" max="99999" step="10" placeholder="0" value="${v.fare || ''}"></div>
+  <div class="field"><label for="em">メモ</label><input id="em" name="memo" type="text" maxlength="100" value="${esc(v.memo)}" placeholder="バス往復、など"></div>
+  <div class="actions"><button class="btn" type="submit">保存する</button></div>
+  ${r ? `<div class="foot" style="justify-content:center"><button class="sbtn txt" type="button" data-act="tcDel" data-id="${esc(r.id)}">この記録を消す</button></div>` : ''}
+  </form>`;
+}
+
 // ───────── 操作 ─────────
 function setDay(d) {
   S.days[d.date] = d; S.days[route().arg || ''] = d; S.day = d;
@@ -627,6 +740,32 @@ function onClick(e) {
   if (act === 'reload') { busy(b, async () => { S.me = await api('me'); render(); }); return; }
   if (act === 'day') { location.hash = 'staff/' + b.dataset.date; return; }
   if (act === 'workSave') { shareWork(S.work); return; }
+  if (act === 'tcMonth') {
+    if (!b.dataset.m) return;
+    S.tcMonth = b.dataset.m; S.tc = null;
+    render();
+    return;
+  }
+  if (act === 'tcAdd') { location.hash = 'staff-work/new'; return; }
+  if (act === 'punchIn') {
+    busy(b, async () => {
+      S.tc = await api('punch', { kind: 'in' });
+      S.tcMonth = S.tc.month;
+      toast('出勤を記録しました');
+      view(staffShell('staff-work', tcView()));
+    });
+    return;
+  }
+  if (act === 'tcDel') {
+    if (!confirm('この記録を消しますか?\n元に戻せません。')) return;
+    busy(b, async () => {
+      S.tc = await api('workRemove', { id: b.dataset.id });
+      S.tcMonth = S.tc.month;
+      toast('消しました');
+      location.hash = 'staff-work';
+    });
+    return;
+  }
   if (act === 'workDel') {
     if (!confirm('この作品をMY作品集から削除しますか?\nこのスマホから消えて、元に戻せません。')) return;
     busy(b, async () => { await workDel(b.dataset.id); toast('削除しました'); location.hash = 'works'; });
@@ -703,6 +842,20 @@ function onSubmit(e) {
       S.me = await api('absent', { studentId: student().id, date, memo: fd.get('memo') });
       toast('欠席連絡を受け付けました');
       location.hash = 'lessons';
+    } else if (act === 'punchOut') {
+      if (!confirm('退勤を記録しますか?')) return;
+      S.tc = await api('punch', { kind: 'out', solo: !!fd.get('solo'), rest: fd.get('rest'), fare: fd.get('fare') });
+      S.tcMonth = S.tc.month;
+      toast('退勤を記録しました');
+      view(staffShell('staff-work', tcView()));
+    } else if (act === 'tcSave') {
+      S.tc = await api('workSave', {
+        id: f.dataset.id || '', date: fd.get('date'), in: fd.get('in'), out: fd.get('out'),
+        rest: fd.get('rest'), solo: fd.get('solo'), fare: fd.get('fare'), memo: fd.get('memo'),
+      });
+      S.tcMonth = S.tc.month;
+      toast('保存しました');
+      location.hash = 'staff-work';
     } else if (act === 'register') {
       S.me = await api('register', { name: fd.get('name'), cls: fd.get('cls') });
       S.sel = S.me.students.length - 1;
