@@ -266,3 +266,6 @@ body.kids { font-family: 'Archivo', 'Zen Maru Gothic', 'Zen Kaku Gothic New', sy
 .tcrow .name { font-variant-numeric: tabular-nums; }
 .tcover { margin: 10px 24px 0; font-size: 12px; color: var(--navy-muted); }
 .tcover b { color: #fff; font-size: 13px; }
+.tcwarn { margin: 14px 24px 0; font-size: 12px; color: #FFB48A; line-height: 1.7; }
+.tcadd { padding: 12px 16px 0; display: flex; justify-content: center; }
+.tcadd .sbtn.txt { color: var(--navy-muted); font-size: 12px; }
