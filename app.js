@@ -517,6 +517,12 @@ async function renderStaff(name, arg) {
       return;
     }
     if (name === 'staff-work') {
+      if (arg === 'pay') {
+        if (!S.tc) { loading(name); S.tc = await api('work', { month: S.tcMonth }); }
+        if (!S.tc.admin) { location.hash = 'staff-work'; return; }
+        if (still(name) && route().arg === 'pay') view(staffShell(name, tcPayPage()));
+        return;
+      }
       if (arg) {
         if (!S.tc) { loading(name); S.tc = await api('work', { month: S.tcMonth }); }
         if (still(name) && route().arg) view(staffShell(name, tcEditView(route().arg)));
@@ -635,91 +641,108 @@ function tcView() {
   <div class="bigdate" style="margin-top:6px"><b>${mn}</b><span>${MONTH_EN[mn - 1]} ${w.month.slice(0, 4)}</span></div></div>
   <div style="display:flex;gap:6px"><button data-act="tcMonth" data-m="${w.prevMonth}" aria-label="前の月">‹</button><button data-act="tcMonth" data-m="${w.nextMonth}" ${w.nextMonth ? '' : 'disabled'} aria-label="次の月">›</button></div></div>
   <div class="stats"><div><small>実働</small><b class="s">${esc(w.mine.hm)}</b></div><div><small>1人体制</small><b class="s">${w.mine.solo}コマ</b></div><div><small>交通費</small><b class="s">${fareText(w.mine.fare)}</b></div></div>
-  ${w.mine.over ? `<div class="tcover">うち8時間を超えた分 <b>${esc(w.mine.overHm)}</b>(${w.overRate}倍で計算します)</div>` : ''}
+  ${w.mine.over ? `<div class="tcover">8時間超 <b>${esc(w.mine.overHm)}</b>(${w.overRate}倍)</div>` : ''}
   ${punchBox(w)}
   ${w.unfinished.length ? `<div class="tcwarn">${w.unfinished.map(r => jp(r.date)).join('、')} の退勤が打刻されていません。</div>` : ''}
-  <div class="grouphead"><b>${mn}月の記録</b><span>選ぶと訂正できます</span></div>
+  <div class="grouphead"><b>${mn}月の記録</b><span>押すと訂正</span></div>
   <div class="list">${w.rows.length ? w.rows.map(tcItem).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
-  <div class="tcadd"><button class="sbtn txt" data-act="tcAdd">打刻のない日を記録する</button></div>
-  ${w.admin ? `<div class="tcadd" style="flex-direction:column;gap:4px">
-    <div class="tcsm" style="margin:0">教室の位置 ${w.place.set ? '登録済み ・ ' + w.place.radius + 'm以内で打刻できます' : '未登録 ・ いまは位置を確認していません'}</div>
-    <button class="sbtn txt" data-act="tcPlace">いまいる場所を教室として登録する</button></div>` : ''}
-  ${w.admin ? tcPayView(w) : ''}
+  <div class="tcadd"><button class="sbtn txt" data-act="tcAdd">手入力で訂正</button></div>
+  ${w.admin ? tcPayRow(w, mn) : ''}
+  ${w.admin ? tcPlaceBox(w) : ''}
   <div style="height:24px"></div>`;
+}
+
+// 支給額は1行だけ出して、中身は別の画面で見る
+function tcPayRow(w, mn) {
+  return `<div class="grouphead" style="padding-top:20px"><b>${mn}月の支給額</b><span style="color:#FFB48A">ほかの先生には出ません</span></div>
+  <div class="list"><a class="item tcrow" href="#staff-work/pay">
+  <div class="body"><div class="name">合計</div>
+  <div class="sm">${w.pay.length ? w.pay.map(p => esc(p.name)).join(' ・ ') : 'この月の記録はありません'}</div></div>
+  <div class="paid" style="font-size:17px">${fareText(w.payTotal)}</div>${I.arrow}</a></div>`;
+}
+
+// 教室の位置は1回だけ登録する。登録したあとは文字だけになる。
+function tcPlaceBox(w) {
+  if (w.place.set) {
+    return `<div class="tcadd"><span class="tcsm" style="margin:0">教室の位置 登録済み(${w.place.radius}m)</span></div>`;
+  }
+  return `<div class="tcbox">
+  <div class="tcsm" style="margin:0">教室の位置 <b style="color:#FFB48A">未登録</b> ・ いまは場所を確認していません</div>
+  <button class="btn" data-act="tcPlace" style="margin-top:14px">教室登録</button></div>`;
 }
 
 function punchBox(w) {
   if (w.open) {
     return `<form data-act="punchOut" class="tcbox">
     <div class="eyebrow">WORKING ・ ${jp(w.today)}</div>
-    <div class="tcnow"><b>${esc(w.open.in)}</b><span>に出勤しました</span></div>
-    <div class="field" style="margin:16px 0 0"><label for="pr">今日の休憩(分)</label>
-    <input id="pr" name="rest" type="number" inputmode="numeric" min="0" max="600" step="5" placeholder="0" value="${w.open.rest || ''}"></div>
-    <div class="field" style="margin:12px 0 0"><label for="pf">今日の交通費(円)</label>
-    <input id="pf" name="fare" type="number" inputmode="numeric" min="0" max="99999" step="10" placeholder="0" value="${w.open.fare || ''}"></div>
-    <label class="tccheck"><input type="checkbox" name="solo" ${w.open.solo ? 'checked' : ''}>このコマは1人で見ました(+${yen(w.soloYen)})</label>
-    <button class="btn" type="submit" style="margin-top:14px">退勤を打刻する</button>
-    <div class="tcsm">今の時刻(${esc(w.now)})が記録されます。</div></form>`;
+    <div class="tcnow"><b>${esc(w.open.in)}</b><span>出勤</span></div>
+    <div style="display:flex;gap:12px;margin-top:16px">
+      <div class="field" style="flex:1;margin:0"><label for="pr">休憩(分)</label>
+      <input id="pr" name="rest" type="number" inputmode="numeric" min="0" max="600" placeholder="0" value="${w.open.rest || ''}"></div>
+      <div class="field" style="flex:1;margin:0"><label for="pf">交通費(円)</label>
+      <input id="pf" name="fare" type="number" inputmode="numeric" min="0" max="99999" placeholder="0" value="${w.open.fare || ''}"></div></div>
+    <label class="tccheck"><input type="checkbox" name="solo" ${w.open.solo ? 'checked' : ''}>1人体制(+${yen(w.soloYen)})</label>
+    <button class="btn" type="submit" style="margin-top:14px">退勤</button></form>`;
   }
   const done = w.doneToday;
   if (done.length) {
     const last = done[done.length - 1];
     return `<div class="tcbox">
     <div class="eyebrow">TODAY ・ ${jp(w.today)}</div>
-    <div class="tcnow"><b>${esc(last.out)}</b><span>に退勤しました</span></div>
-    <div class="tcsm">${done.map(r => `${esc(r.in)} – ${esc(r.out)}(${esc(r.hm)})`).join(' / ')}${last.fare ? ' ・ 交通費 ' + fareText(last.fare) : ''}${last.solo ? ' ・ 1人体制 ' + last.solo + 'コマ' : ''}</div>
-    <div class="tcsm">訂正するときは、下の一覧から選んでください。</div></div>`;
+    <div class="tcnow"><b>${esc(last.out)}</b><span>退勤</span></div>
+    <div class="tcsm">${done.map(r => `${esc(r.in)} – ${esc(r.out)}(${esc(r.hm)})`).join(' / ')}${last.fare ? ' ・ 交通費 ' + fareText(last.fare) : ''}${last.solo ? ' ・ 1人体制 ' + last.solo + 'コマ' : ''}</div></div>`;
   }
   return `<div class="tcbox">
   <div class="eyebrow">TODAY ・ ${jp(w.today)}</div>
   <div class="tcnow"><b>${esc(w.now)}</b><span>いまの時刻</span></div>
-  <button class="btn" data-act="punchIn" style="margin-top:14px">出勤を打刻する</button>
-  <div class="tcsm">押した時刻が記録されます。打刻のない日は、下から記録できます。</div></div>`;
+  <button class="btn" data-act="punchIn" style="margin-top:14px">出勤</button></div>`;
 }
 
 function tcItem(r) {
   const w = S.tc;
+  // 一覧に出すのは、お金に関わるものと、問題の合図だけ。
+  // 休憩の分数とメモは押せば出るので、ここには出さない。
   const sm = [
     w.admin && !r.mine ? esc(r.name) : '',
-    r.rest ? '休憩 ' + r.rest + '分' : '',
     r.restShort ? '<b style="color:var(--warn)">休憩が足りません</b>' : '',
+    r.out ? '' : '<b style="color:var(--warn)">退勤の打刻なし</b>',
+    r.kind === '手入力' ? '手入力' : '',
     r.solo ? '1人体制 ' + r.solo + 'コマ' : '',
     r.fare ? '交通費 ' + fareText(r.fare) : '',
-    r.out ? '' : '<b style="color:var(--warn)">退勤の打刻なし</b>',
-    r.kind === '申告' ? '申告' : '',
     r.placeIn && r.placeIn.indexOf('OK') !== 0 ? '出勤 ' + esc(r.placeIn) : '',
     r.placeOut && r.placeOut.indexOf('OK') !== 0 ? '退勤 ' + esc(r.placeOut) : '',
     r.fixes ? '訂正' + r.fixes + '回' : '',
-    r.locked ? '確定済み' : '',
-    r.memo ? esc(r.memo) : '',
   ].filter(Boolean).join(' ・ ');
-  return `<a class="item tcrow" href="#staff-work/${encodeURIComponent(r.id)}">
+  // 確定した日は「確定済み」と書かず、文字を薄くする
+  return `<a class="item tcrow${r.locked ? ' done' : ''}" href="#staff-work/${encodeURIComponent(r.id)}">
   <div class="d"><b>${dd(r.date)}</b><span>${dow(r.date)}</span></div>
   <div class="body"><div class="name">${r.in ? esc(r.in) : '—'} – ${r.out ? esc(r.out) : '—'}${r.out ? '　' + esc(r.hm) : ''}</div>
   ${sm ? `<div class="sm">${sm}</div>` : ''}</div>${I.arrow}</a>`;
 }
 
-function tcPayView(w) {
-  const mn = Number(w.month.slice(5));
-  return `<div style="margin:24px 24px 0;height:1px;background:var(--navy-line)"></div>
-  <div class="grouphead"><b>${mn}月の支給額</b><span style="color:#FFB48A">ほかの先生には出ません</span></div>
+// 支給額は稲垣さん(管理)だけの別画面。サーバーも管理以外には中身を返さない。
+function tcPayPage() {
+  const w = S.tc, mn = Number(w.month.slice(5));
+  return `<div class="sub"><a class="back" href="#staff-work">${I.back}</a><div class="title">${mn}月の支給額</div></div>
   <p class="note" style="margin-top:0">時給×実働 ＋ 単独手当×コマ数 ＋ 交通費。1日8時間を超えた分は${w.overRate}倍です。</p>
-  <div class="list" style="margin-top:10px">${w.pay.length ? w.pay.map(p => `<div class="item">
+  <div class="list" style="margin-top:12px">${w.pay.length ? w.pay.map(p => `<div class="item">
     <div class="body"><div class="name">${esc(p.name)}</div>
     <div class="sm">${esc(p.hm)}(${p.days}件)${p.over ? ' ・ <b>うち8時間超 ' + esc(p.overHm) + '</b>' : ''} ・ ${p.wage ? '時給' + fareText(p.wage) : '<b style="color:var(--warn)">時給が未設定</b>'} ・ 1人体制${p.solo}コマ(1コマ${fareText(p.solo1)}) ・ 交通費${fareText(p.fare)}</div></div>
     <div class="paid" style="font-size:15px">${p.amount == null ? '—' : fareText(p.amount)}</div></div>`).join('')
     : '<div class="empty">この月の記録はありません</div>'}
   ${w.payTotal ? `<div class="item" style="background:var(--soft)"><div class="body"><div class="name">合計</div></div>
     <div class="paid" style="font-size:15px">${fareText(w.payTotal)}</div></div>` : ''}</div>
-  ${w.pay.some(p => !p.wage) ? '<p class="note">時給は「先生」シートの「時給」に入れてください。1人体制の手当も先生ごとに「単独手当」で変えられます。</p>' : ''}`;
+  ${w.pay.some(p => !p.wage) ? '<p class="note">時給は「先生」シートの「時給」に入れてください。1人体制の手当も先生ごとに「単独手当」で変えられます。</p>' : ''}
+  <div style="height:24px"></div>`;
 }
 
+// 訂正の記録は、ふだんは閉じておく
 function fixLog(r) {
   if (!r || !r.log.length) return '';
-  return `<div class="grouphead" style="padding-top:22px"><b>訂正の記録</b><span>${r.log.length}件</span></div>
+  return `<details class="fold2"><summary>訂正の記録<span>${r.log.length}件 ・ 押すと開く</span></summary>
   <div class="list">${r.log.slice().reverse().map(e => `<div class="item"><div class="body">
     <div class="name" style="font-size:13px">${esc(e.field)}　${esc(e.from)} → ${esc(e.to)}</div>
-    <div class="sm">${esc(e.at)} ・ ${esc(e.by)} ・ ${esc(e.why)}</div></div></div>`).join('')}</div>`;
+    <div class="sm">${esc(e.at)} ・ ${esc(e.by)} ・ ${esc(e.why)}</div></div></div>`).join('')}</div></details>`;
 }
 
 function tcEditView(id) {
@@ -732,37 +755,42 @@ function tcEditView(id) {
   if (r && r.locked) {
     const line = (k, v) => `<div class="item"><div class="body"><div class="sm">${k}</div><div class="name">${v}</div></div></div>`;
     return `${head('記録（確定済み）')}
-    <p class="note" style="margin-top:0">${jp(r.date)}${w.admin ? '' : ' の記録は確定しました。訂正が必要なときは管理の先生にお伝えください。'}</p>
+    <p class="note" style="margin-top:0">${jp(r.date)}${w.admin ? '' : '。訂正が必要なときは管理の先生へ。'}</p>
     <div class="list" style="margin-top:12px">
     ${line('出勤 – 退勤', `${esc(r.in || '—')} – ${esc(r.out || '—')}`)}
     ${line('休憩', r.rest + '分')}
     ${line('実働', esc(r.hm))}
     ${line('1人体制', r.solo + 'コマ')}
     ${line('交通費', fareText(r.fare))}
-    ${r.punchIn || r.punchOut ? line('打刻（もとの記録）', `${esc(r.punchIn || '—')} – ${esc(r.punchOut || '—')}`) : line('種別', '打刻のない日の記録')}
+    ${r.memo ? line('メモ', esc(r.memo)) : ''}
+    ${r.punchIn || r.punchOut ? line('打刻（もとの記録）', `${esc(r.punchIn || '—')} – ${esc(r.punchOut || '—')}`) : line('種別', '手入力')}
     </div>${fixLog(r)}<div style="height:24px"></div>`;
   }
 
   const v = r || { date: w.today, in: '', out: '', rest: 0, solo: 0, fare: 0, memo: '' };
   const why = r ? '押し間違い' : '打ち忘れ';
-  return `<form data-act="tcSave" ${r ? `data-id="${esc(r.id)}"` : ''}>${head(r ? '記録の訂正' : '打刻のない日の記録')}
+  // 入力欄は2列に並べて、1画面に収める
+  return `<form data-act="tcSave" ${r ? `data-id="${esc(r.id)}"` : ''}>${head(r ? '記録の訂正' : '手入力で訂正')}
   ${r && !r.mine ? `<p class="note" style="margin-top:0">${esc(r.name)}さんの記録です。</p>` : ''}
-  ${r && (r.punchIn || r.punchOut) ? `<p class="note" style="margin-top:0">打刻（もとの記録）${esc(r.punchIn || '—')} – ${esc(r.punchOut || '—')}　この記録は残ります。</p>` : ''}
+  ${r && (r.punchIn || r.punchOut) ? `<p class="note" style="margin-top:0">打刻 ${esc(r.punchIn || '—')} – ${esc(r.punchOut || '—')}（残ります）</p>` : ''}
   <div class="field"><label for="ed">日付</label><input id="ed" name="date" type="date" value="${esc(v.date)}" max="${esc(w.today)}" required></div>
   <div style="display:flex">
     <div class="field" style="flex:1"><label for="ei">出勤</label><input id="ei" name="in" type="time" value="${esc(v.in)}"></div>
     <div class="field" style="flex:1;margin-left:0"><label for="eo">退勤</label><input id="eo" name="out" type="time" value="${esc(v.out)}"></div></div>
-  <div class="field"><label for="er">休憩(分)</label><input id="er" name="rest" type="number" inputmode="numeric" min="0" max="600" step="5" placeholder="0" value="${v.rest || ''}"></div>
-  <div class="field"><label for="es">1人で見たコマ数</label><input id="es" name="solo" type="number" inputmode="numeric" min="0" max="9" step="1" value="${v.solo || 0}"></div>
-  <div class="field"><label for="ef">交通費(円)</label><input id="ef" name="fare" type="number" inputmode="numeric" min="0" max="99999" step="10" placeholder="0" value="${v.fare || ''}"></div>
-  <div class="field"><label for="em">メモ</label><input id="em" name="memo" type="text" maxlength="100" value="${esc(v.memo)}" placeholder="バス往復、など"></div>
-  <div class="field"><label for="ew">${r ? '訂正の理由' : '記録する理由'}</label>
+  <div style="display:flex">
+    <div class="field" style="flex:1"><label for="er">休憩(分)</label><input id="er" name="rest" type="number" inputmode="numeric" min="0" max="600" placeholder="0" value="${v.rest || ''}"></div>
+    <div class="field" style="flex:1;margin-left:0"><label for="es">1人のコマ数</label><input id="es" name="solo" type="number" inputmode="numeric" min="0" max="9" value="${v.solo || 0}"></div></div>
+  <div style="display:flex">
+    <div class="field" style="flex:1"><label for="ef">交通費(円)</label><input id="ef" name="fare" type="number" inputmode="numeric" min="0" max="99999" placeholder="0" value="${v.fare || ''}"></div>
+    <div class="field" style="flex:1;margin-left:0"><label for="em">メモ</label><input id="em" name="memo" type="text" maxlength="100" value="${esc(v.memo)}" placeholder="バス往復"></div></div>
+  <div class="field"><label for="ew">訂正の理由</label>
     <select id="ew" name="why">${w.why.map(x => `<option${x === why ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
-  <div class="field"><label for="et">理由が「その他」のとき</label><input id="et" name="whyText" type="text" maxlength="60" placeholder="ひとこと"></div>
-  <p class="note">理由は訂正履歴に残ります。この日は ${esc(jp(v.date))} から${w.fixDays}日（${r ? esc(jp(r.until)) : '記録した日の' + w.fixDays + '日後'}）まで訂正できます。</p>
+  <div class="field" id="ewrap" ${why === 'その他' ? '' : 'hidden'}><label for="et">そのわけ</label><input id="et" name="whyText" type="text" maxlength="60" placeholder="ひとこと"></div>
+  <p class="note">${r ? esc(jp(r.until)) + 'まで訂正できます' : '保存した日から' + w.fixDays + '日間、訂正できます'}</p>
   <div class="actions"><button class="btn" type="submit">保存する</button></div>
+  ${fixLog(r)}
   ${r ? `<div class="foot" style="justify-content:center"><button class="sbtn txt" type="button" data-act="tcDel" data-id="${esc(r.id)}">この記録を削除</button></div>` : ''}
-  ${fixLog(r)}<div style="height:24px"></div>
+  <div style="height:24px"></div>
   </form>`;
 }
 
@@ -803,7 +831,7 @@ function onClick(e) {
   }
   if (act === 'tcAdd') { location.hash = 'staff-work/new'; return; }
   if (act === 'tcPlace') {
-    if (!confirm('いまいる場所を教室として登録しますか?\n教室の中で押してください。')) return;
+    if (!confirm('いまいる場所を教室として登録しますか?\n教室の中で押してください。\nあとからアプリで変えることはできません。')) return;
     busy(b, async () => {
       toast('位置を確認しています…');
       const pos = await getPos();
@@ -868,6 +896,11 @@ function onClick(e) {
 function onChange(e) {
   const f = e.target.form;
   if (!f) return;
+  // 理由が「その他」のときだけ、自由記入の欄を出す
+  if (f.dataset.act === 'tcSave' && e.target.name === 'why') {
+    const wrap = document.getElementById('ewrap');
+    if (wrap) wrap.hidden = e.target.value !== 'その他';
+  }
   if (f.dataset.act === 'work' && e.target.name === 'photo' && e.target.files[0]) {
     const img = document.getElementById('wpv');
     img.src = blobUrl(e.target.files[0]);

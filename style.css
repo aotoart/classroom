@@ -126,6 +126,7 @@ button, input, textarea, select { font-family: inherit; }
 .dark .pick label:has(input:checked) { background: var(--blue); border-color: var(--blue); }
 
 .field { margin: 16px 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.field[hidden] { display: none; }
 .field label { font-size: 10px; font-weight: 600; letter-spacing: .22em; color: var(--muted); padding: 0 8px; }
 .dark .field label { color: var(--pale); }
 .field input, .field textarea, .field select { border: 1px solid var(--line2); border-radius: 6px; background: #fff; padding: 12px 14px; font-size: 16px; color: var(--ink); width: 100%; }
@@ -269,3 +270,18 @@ body.kids { font-family: 'Archivo', 'Zen Maru Gothic', 'Zen Kaku Gothic New', sy
 .tcwarn { margin: 14px 24px 0; font-size: 12px; color: #FFB48A; line-height: 1.7; }
 .tcadd { padding: 12px 16px 0; display: flex; justify-content: center; }
 .tcadd .sbtn.txt { color: var(--navy-muted); font-size: 12px; }
+
+/* 勤務の一覧だけ行が <a> なので「.dark a」の薄い青が効いてしまう。
+   ほかの一覧と同じ濃さに戻す */
+.list .tcrow { color: var(--ink); }
+/* 確定した日は「確定済み」と書かず、文字を薄くする（取り消し線は引かない） */
+.list .tcrow.done, .list .tcrow.done .sm, .list .tcrow.done .d span,
+.list .tcrow.done .d b, .list .tcrow.done .name { color: var(--gone); }
+.list .tcrow.done svg { opacity: .5; }
+/* 訂正の記録は、ふだんは閉じておく */
+details.fold2 { margin: 18px 16px 0; }
+details.fold2 > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  border: 1px solid var(--navy-line); border-radius: 6px; padding: 14px 16px; font-size: 13px; font-weight: 700; color: #fff; }
+details.fold2 > summary::-webkit-details-marker { display: none; }
+details.fold2 > summary span { font-size: 11px; color: var(--navy-muted); font-weight: 400; }
+details.fold2 .list { margin: 10px 0 0; }
