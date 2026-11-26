@@ -615,6 +615,19 @@ function staffBcView() {
 // ───────── 勤務(タイムカード) ─────────
 const fareText = n => Number(n || 0).toLocaleString('ja-JP') + '円';
 
+function getPos() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve({});
+    let done = false;
+    const end = v => { if (!done) { done = true; resolve(v); } };
+    navigator.geolocation.getCurrentPosition(
+      p => end({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
+      () => end({}),
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 });
+    setTimeout(() => end({}), 10000);
+  });
+}
+
 function tcView() {
   const w = S.tc, mn = Number(w.month.slice(5));
   return `
@@ -628,6 +641,9 @@ function tcView() {
   <div class="grouphead"><b>${mn}月の記録</b><span>選ぶと訂正できます</span></div>
   <div class="list">${w.rows.length ? w.rows.map(tcItem).join('') : '<div class="empty">まだ記録がありません</div>'}</div>
   <div class="tcadd"><button class="sbtn txt" data-act="tcAdd">打刻のない日を記録する</button></div>
+  ${w.admin ? `<div class="tcadd" style="flex-direction:column;gap:4px">
+    <div class="tcsm" style="margin:0">教室の位置 ${w.place.set ? '登録済み ・ ' + w.place.radius + 'm以内で打刻できます' : '未登録 ・ いまは位置を確認していません'}</div>
+    <button class="sbtn txt" data-act="tcPlace">いまいる場所を教室として登録する</button></div>` : ''}
   ${w.admin ? tcPayView(w) : ''}
   <div style="height:24px"></div>`;
 }
@@ -671,6 +687,8 @@ function tcItem(r) {
     r.fare ? '交通費 ' + fareText(r.fare) : '',
     r.out ? '' : '<b style="color:var(--warn)">退勤の打刻なし</b>',
     r.kind === '申告' ? '申告' : '',
+    r.placeIn && r.placeIn.indexOf('OK') !== 0 ? '出勤 ' + esc(r.placeIn) : '',
+    r.placeOut && r.placeOut.indexOf('OK') !== 0 ? '退勤 ' + esc(r.placeOut) : '',
     r.fixes ? '訂正' + r.fixes + '回' : '',
     r.locked ? '確定済み' : '',
     r.memo ? esc(r.memo) : '',
@@ -784,9 +802,24 @@ function onClick(e) {
     return;
   }
   if (act === 'tcAdd') { location.hash = 'staff-work/new'; return; }
+  if (act === 'tcPlace') {
+    if (!confirm('いまいる場所を教室として登録しますか?\n教室の中で押してください。')) return;
+    busy(b, async () => {
+      toast('位置を確認しています…');
+      const pos = await getPos();
+      if (!pos.lat) { toast('位置が取れませんでした。位置情報を許可してください', true); return; }
+      S.tc = await api('setPlace', pos);
+      S.tcMonth = S.tc.month;
+      toast('教室として登録しました（誤差' + Math.round(pos.acc) + 'm）');
+      view(staffShell('staff-work', tcView()));
+    });
+    return;
+  }
   if (act === 'punchIn') {
     busy(b, async () => {
-      S.tc = await api('punch', { kind: 'in' });
+      if (S.tc.place.on) toast('位置を確認しています…');
+      const pos = S.tc.place.on ? await getPos() : {};
+      S.tc = await api('punch', Object.assign({ kind: 'in' }, pos));
       S.tcMonth = S.tc.month;
       toast('出勤を打刻しました');
       view(staffShell('staff-work', tcView()));
@@ -885,7 +918,9 @@ function onSubmit(e) {
       location.hash = 'lessons';
     } else if (act === 'punchOut') {
       if (!confirm('退勤を打刻しますか?')) return;
-      S.tc = await api('punch', { kind: 'out', solo: !!fd.get('solo'), rest: fd.get('rest'), fare: fd.get('fare') });
+      if (S.tc.place.on) toast('位置を確認しています…');
+      const pos = S.tc.place.on ? await getPos() : {};
+      S.tc = await api('punch', Object.assign({ kind: 'out', solo: !!fd.get('solo'), rest: fd.get('rest'), fare: fd.get('fare') }, pos));
       S.tcMonth = S.tc.month;
       toast('退勤を打刻しました');
       view(staffShell('staff-work', tcView()));
